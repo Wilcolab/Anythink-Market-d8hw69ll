@@ -1,20 +1,19 @@
 document.addEventListener("DOMContentLoaded", function () {
-  // File input preview
+  // File input preview and auto-submit
   const fileInput = document.getElementById("image-upload");
-  const fileLabel = document.querySelector(".file-label");
   const previewContainer = document.getElementById("preview-container");
+  const uploadForm = document.querySelector("form[action='/upload']");
+  const loadingIndicator = document.querySelector(".loading");
 
-  if (fileInput) {
+  if (fileInput && uploadForm) {
     fileInput.addEventListener("change", function () {
       if (this.files && this.files[0]) {
-        // Update label text with filename
-        const fileName = this.files[0].name;
-        if (fileLabel) {
-          fileLabel.textContent =
-            fileName.length > 20 ? fileName.substring(0, 20) + "..." : fileName;
+        // Show loading indicator
+        if (loadingIndicator) {
+          loadingIndicator.style.display = "flex";
         }
 
-        // Show image preview if we're on the upload page
+        // Show image preview
         if (previewContainer) {
           previewContainer.innerHTML = "";
           const reader = new FileReader();
@@ -24,15 +23,15 @@ document.addEventListener("DOMContentLoaded", function () {
             img.src = e.target.result;
             img.className = "preview-image";
             previewContainer.appendChild(img);
+            
+            // Auto-submit the form after preview is loaded
+            uploadForm.submit();
           };
 
           reader.readAsDataURL(this.files[0]);
-        }
-
-        // Auto-submit the form if it has data-auto-submit attribute
-        const form = this.closest("form[data-auto-submit]");
-        if (form) {
-          form.submit();
+        } else {
+          // If no preview container, submit immediately
+          uploadForm.submit();
         }
       }
     });
@@ -62,14 +61,9 @@ document.addEventListener("DOMContentLoaded", function () {
   forms.forEach((form) => {
     form.addEventListener("submit", function () {
       const loadingEl = this.querySelector(".loading");
-      const submitBtn = this.querySelector('button[type="submit"]');
 
       if (loadingEl) {
         loadingEl.style.display = "flex";
-      }
-
-      if (submitBtn) {
-        submitBtn.disabled = true;
       }
     });
   });

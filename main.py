@@ -110,9 +110,21 @@ async def get_filter_page(request: Request, image_id: str):
 
 @app.post("/api/apply-filter")
 async def api_apply_filter(
-    image_id: str = Form(...), 
-    selected_filter: str = Form(...)
+    image_id: str = Form(None), 
+    selected_filter: str = Form(None)
 ):
+    # If no parameters provided, return the original image
+    if not image_id or not selected_filter:
+        # Get the first image in the store if available
+        if IMAGE_STORE:
+            first_image_id = next(iter(IMAGE_STORE))
+            img_base64 = IMAGE_STORE.get(first_image_id)
+            return JSONResponse({
+                "image_data": f"data:image/jpeg;base64,{img_base64}",
+                "original_image_data": f"data:image/jpeg;base64,{img_base64}"
+            })
+        return JSONResponse({"error": "No images available"}, status_code=404)
+    
     # Get the image data from storage
     img_base64 = IMAGE_STORE.get(image_id)
     
@@ -305,14 +317,14 @@ async def api_apply_filter(
         # No filter or unknown filter
         filtered_img = img
     
-    # Save to memory buffer instead of file
+    # Convert filtered image to base64
     buffered = io.BytesIO()
     filtered_img.save(buffered, format="JPEG", quality=85)
-    img_str = base64.b64encode(buffered.getvalue()).decode()
+    filtered_img_base64 = base64.b64encode(buffered.getvalue()).decode()
     
     return JSONResponse({
-        "image_data": f"data:image/jpeg;base64,{img_str}",
-        "filter_name": FILTERS.get(selected_filter, "Unknown")
+        "image_data": f"data:image/jpeg;base64,{filtered_img_base64}",
+        "original_image_data": f"data:image/jpeg;base64,{img_base64}"
     })
 
 @app.post("/download")
