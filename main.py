@@ -9,6 +9,7 @@ import base64
 from pathlib import Path
 import uuid
 import uvicorn
+import random
 
 # Get the base directory using the current file's location
 BASE_DIR = Path(__file__).resolve().parent
@@ -38,7 +39,10 @@ FILTERS = {
     "brightness": "Increase brightness",
     "contrast": "Increase contrast",
     "invert": "Invert colors",
-    "sepia": "Sepia tone effect"
+    "sepia": "Sepia tone effect",
+    "black_white": "High contrast black and white",
+    "vintage": "Vintage film effect",
+    "glitch": "Digital glitch effect"
 }
 
 @app.get("/", response_class=HTMLResponse)
@@ -183,6 +187,120 @@ async def api_apply_filter(
                 pixels[px, py] = (tr, tg, tb)
         
         filtered_img = rgb_img
+    elif selected_filter == "black_white":
+        # High contrast black and white filter
+        # First convert to grayscale
+        gray_img = img.convert("L")
+        # Apply threshold to create high contrast
+        threshold = 128
+        filtered_img = gray_img.point(lambda x: 255 if x > threshold else 0).convert("RGB")
+    elif selected_filter == "vintage":
+        # Vintage film effect
+        # Convert to RGB mode if it's not already
+        rgb_img = img.convert('RGB')
+        
+        # 1. Slightly desaturate the image
+        enhancer = ImageEnhance.Color(rgb_img)
+        desaturated = enhancer.enhance(0.7)
+        
+        # 2. Apply a warm color tone
+        width, height = desaturated.size
+        pixels = desaturated.load()
+        
+        for py in range(height):
+            for px in range(width):
+                r, g, b = desaturated.getpixel((px, py))
+                
+                # Add a warm/yellowish tint
+                tr = min(255, int(r * 1.1))
+                tg = min(255, int(g * 1.05))
+                tb = max(0, int(b * 0.9))  # Slightly reduce blue
+                
+                pixels[px, py] = (tr, tg, tb)
+        
+        # 3. Add subtle vignette effect
+        # Create a new blank image for the vignette
+        vignette = Image.new('RGB', rgb_img.size, (0, 0, 0))
+        vignette_pixels = vignette.load()
+        
+        # Calculate center of the image
+        center_x, center_y = width // 2, height // 2
+        max_dist = (center_x ** 2 + center_y ** 2) ** 0.5
+        
+        # Apply vignette
+        for py in range(height):
+            for px in range(width):
+                # Calculate distance from center (normalized)
+                dist = ((px - center_x) ** 2 + (py - center_y) ** 2) ** 0.5 / max_dist
+                # Create vignette factor (1.0 at center, lower at edges)
+                factor = max(0.7, 1.0 - (dist * 0.5))
+                
+                r, g, b = desaturated.getpixel((px, py))
+                pixels[px, py] = (
+                    int(r * factor),
+                    int(g * factor),
+                    int(b * factor)
+                )
+        
+        filtered_img = desaturated
+    elif selected_filter == "glitch":
+        # Digital glitch effect
+        rgb_img = img.convert('RGB')
+        width, height = rgb_img.size
+        pixels = rgb_img.load()
+        
+        # Create a copy for the glitch effect
+        glitched = rgb_img.copy()
+        glitched_pixels = glitched.load()
+        
+        # Create horizontal shifts in random locations
+        num_glitches = int(height * 0.1)  # 10% of the height
+        glitch_lines = random.sample(range(height), num_glitches)
+        
+        for line in glitch_lines:
+            # Determine shift amount
+            shift = random.randint(5, 30)
+            direction = random.choice([-1, 1])
+            
+            # Apply the shift to this line
+            for px in range(width):
+                shifted_x = (px + (shift * direction)) % width
+                
+                # Apply color channel separation for stronger effect
+                if random.random() < 0.5:  # 50% chance for this effect
+                    # Get original pixel
+                    r, g, b = rgb_img.getpixel((px, line))
+                    
+                    # Shift only one or two color channels
+                    channels = random.choice([
+                        (r, g, rgb_img.getpixel((shifted_x, line))[2]),  # Shift blue
+                        (r, rgb_img.getpixel((shifted_x, line))[1], b),  # Shift green
+                        (rgb_img.getpixel((shifted_x, line))[0], g, b),  # Shift red
+                    ])
+                    
+                    glitched_pixels[px, line] = channels
+                else:
+                    # Regular full shift
+                    glitched_pixels[px, line] = rgb_img.getpixel((shifted_x, line))
+        
+        # Add a few random blocks of shifted pixels
+        num_blocks = random.randint(2, 5)
+        for _ in range(num_blocks):
+            block_x = random.randint(0, width - 50)
+            block_y = random.randint(0, height - 20)
+            block_width = random.randint(10, 50)
+            block_height = random.randint(5, 20)
+            
+            # Shift this block
+            shift_x = random.randint(-30, 30)
+            
+            for by in range(block_height):
+                for bx in range(block_width):
+                    if block_x + bx < width and block_y + by < height:
+                        src_x = (block_x + bx + shift_x) % width
+                        glitched_pixels[block_x + bx, block_y + by] = rgb_img.getpixel((src_x, block_y + by))
+        
+        filtered_img = glitched
     else:
         # No filter or unknown filter
         filtered_img = img
